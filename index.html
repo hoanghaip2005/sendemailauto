@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Automation Tool</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>🚀 Email Automation Tool</h1>
+        <p>Tự động gửi email từ Google Sheets</p>
+    </header>
+
+    <main class="container">
+        <!-- Status Dashboard -->
+        <section class="dashboard">
+            <div class="card">
+                <h2>📊 Thống kê</h2>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-number" id="total-emails">0</span>
+                        <span class="stat-label">Tổng số email</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="sent-emails">0</span>
+                        <span class="stat-label">Đã gửi</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="failed-emails">0</span>
+                        <span class="stat-label">Thất bại</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number" id="success-rate">0%</span>
+                        <span class="stat-label">Tỷ lệ thành công</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Control Panel -->
+        <section class="controls">
+            <div class="card">
+                <h2>⚙️ Điều khiển</h2>
+                <div class="control-buttons">
+                    <button id="start-cronjob" class="btn btn-primary">
+                        <span class="btn-icon">▶️</span>
+                        Bắt đầu tự động gửi
+                    </button>
+                    <button id="stop-cronjob" class="btn btn-secondary">
+                        <span class="btn-icon">⏹️</span>
+                        Dừng tự động gửi
+                    </button>
+                    <button id="send-now" class="btn btn-accent">
+                        <span class="btn-icon">📧</span>
+                        Gửi ngay
+                    </button>
+                    <button id="refresh-data" class="btn btn-outline">
+                        <span class="btn-icon">🔄</span>
+                        Làm mới dữ liệu
+                    </button>
+                    <button id="auth-gmail" class="btn btn-warning" style="display: none;">
+                        <span class="btn-icon">🔑</span>
+                        Xác thực Gmail
+                    </button>
+                </div>
+                
+                <div class="settings">
+                    <label for="interval-select">Chu kỳ gửi email:</label>
+                    <select id="interval-select">
+                        <option value="5">5 phút</option>
+                        <option value="15">15 phút</option>
+                        <option value="30" selected>30 phút</option>
+                        <option value="60">1 giờ</option>
+                        <option value="120">2 giờ</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <!-- Status -->
+        <section class="status">
+            <div class="card">
+                <h2>📡 Trạng thái hệ thống</h2>
+                <div class="status-indicators">
+                    <div class="status-item">
+                        <span class="status-dot" id="cronjob-status"></span>
+                        <span>Cronjob: <span id="cronjob-text">Đang dừng</span></span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-dot" id="sheets-status"></span>
+                        <span>Google Sheets: <span id="sheets-text">Kiểm tra...</span></span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-dot" id="gmail-status"></span>
+                        <span>Gmail API: <span id="gmail-text">Kiểm tra...</span></span>
+                    </div>
+                </div>
+                <div class="last-run">
+                    <p>Lần chạy cuối: <span id="last-run">Chưa có</span></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Email Preview -->
+        <section class="preview">
+            <div class="card">
+                <h2>📝 Preview Email</h2>
+                <div class="email-preview">
+                    <div class="preview-header">
+                        <strong>Tiêu đề:</strong> <span id="preview-subject">Đang tải...</span>
+                    </div>
+                    <div class="preview-body">
+                        <strong>Nội dung:</strong>
+                        <div id="preview-content">Đang tải nội dung email...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Logs -->
+        <section class="logs">
+            <div class="card">
+                <h2>📋 Lịch sử gửi email</h2>
+                <div class="logs-controls">
+                    <button id="clear-logs" class="btn btn-small">Xóa logs</button>
+                    <button id="export-logs" class="btn btn-small btn-outline">Xuất logs</button>
+                </div>
+                <div class="logs-container">
+                    <div id="logs-content">
+                        <div class="log-item info">
+                            <span class="log-time">${new Date().toLocaleString('vi-VN')}</span>
+                            <span class="log-message">Hệ thống đã khởi động</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Email Automation Tool - Made with ❤️</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,361 @@
+const { google } = require('googleapis');
+const path = require('path');
+const fs = require('fs-extra');
+
+class GoogleSheetsService {
+    constructor() {
+        this.sheets = null;
+        this.auth = null;
+        this.spreadsheetId = this.extractSpreadsheetId(process.env.GOOGLE_SHEET_URL);
+        this.initialized = false;
+    }
+
+    extractSpreadsheetId(url) {
+        if (!url) {
+            throw new Error('GOOGLE_SHEET_URL not provided');
+        }
+        
+        // Extract ID from Google Sheets URL
+        const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+        if (!match) {
+            throw new Error('Invalid Google Sheets URL format');
+        }
+        
+        return match[1];
+    }
+
+    async initialize() {
+        try {
+            // Prioritize API key for read-only access (simplest method)
+            if (process.env.GOOGLE_API_KEY) {
+                console.log('Using Google API key for Sheets access');
+                this.sheets = google.sheets({ 
+                    version: 'v4', 
+                    auth: process.env.GOOGLE_API_KEY 
+                });
+                this.initialized = true;
+                return;
+            }
+
+            // Use OAuth2 credentials if available
+            if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+                console.log('Using OAuth2 for Sheets access');
+                this.auth = new google.auth.OAuth2(
+                    process.env.GOOGLE_CLIENT_ID,
+                    process.env.GOOGLE_CLIENT_SECRET,
+                    process.env.GOOGLE_REDIRECT_URI || 'urn:ietf:wg:oauth:2.0:oob'
+                );
+
+                // Set refresh token if available
+                if (process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_REFRESH_TOKEN !== 'your-refresh-token-here') {
+                    this.auth.setCredentials({
+                        refresh_token: process.env.GOOGLE_REFRESH_TOKEN
+                    });
+                }
+
+                this.sheets = google.sheets({ version: 'v4', auth: this.auth });
+                this.initialized = true;
+                return;
+            }
+
+            // Use service account if keyFile is specified
+            if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE) {
+                console.log('Using service account for Sheets access');
+                this.auth = new google.auth.GoogleAuth({
+                    keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE,
+                    scopes: [
+                        'https://www.googleapis.com/auth/spreadsheets.readonly',
+                        'https://www.googleapis.com/auth/drive.readonly'
+                    ],
+                });
+
+                this.sheets = google.sheets({ version: 'v4', auth: this.auth });
+                this.initialized = true;
+                return;
+            }
+
+            throw new Error('No valid Google authentication method found. Please provide GOOGLE_API_KEY, OAuth2 credentials, or service account key file.');
+
+        } catch (error) {
+            console.error('Failed to initialize Google Sheets service:', error);
+            throw error;
+        }
+    }
+
+    async testConnection() {
+        try {
+            if (!this.initialized) {
+                await this.initialize();
+            }
+
+            // Try to read a small range to test connection
+            const response = await this.sheets.spreadsheets.values.get({
+                spreadsheetId: this.spreadsheetId,
+                range: 'Sheet1!A1:B1',
+            });
+
+            return response.status === 200;
+        } catch (error) {
+            console.error('Google Sheets connection test failed:', error);
+            return false;
+        }
+    }
+
+    async getRecipientData() {
+        try {
+            if (!this.initialized) {
+                await this.initialize();
+            }
+
+            // Read recipient data from Sheet1 (columns A to F + additional email columns)
+            const response = await this.sheets.spreadsheets.values.get({
+                spreadsheetId: this.spreadsheetId,
+                range: 'Sheet1!A:Z', // Read all columns from A to Z
+            });
+
+            const rows = response.data.values;
+            if (!rows || rows.length === 0) {
+                return [];
+            }
+
+            // First row contains headers
+            const headers = rows[0];
+            const recipients = [];
+
+            // Process each row (skip header row)
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                
+                // Skip empty rows
+                if (!row || row.length === 0) {
+                    continue;
+                }
+
+                const recipient = {
+                    keyword: row[0] || '', // Từ khóa (Column A)
+                    name: row[1] || '',     // Tên (Column B)
+                    address: row[2] || '',  // Địa chỉ (Column C)
+                    website: row[3] || '',  // Trang web (Column D)
+                    primaryEmail: row[4] || '', // Email chính (Column E)
+                    status: row[5] || 'new', // Trạng thái (Column F)
+                    additionalEmails: [],   // Emails từ cột G trở đi
+                    rowIndex: i + 1 // Store row index for updating status
+                };
+
+                // Extract additional emails from column G onwards
+                for (let j = 6; j < row.length; j++) {
+                    const email = row[j];
+                    if (email && this.isValidEmail(email)) {
+                        recipient.additionalEmails.push(email);
+                    }
+                }
+
+                // Only add recipient if they have at least one valid email
+                const allEmails = [recipient.primaryEmail, ...recipient.additionalEmails]
+                    .filter(email => email && this.isValidEmail(email));
+                
+                if (allEmails.length > 0) {
+                    recipient.allEmails = allEmails;
+                    recipients.push(recipient);
+                }
+            }
+
+            return recipients;
+
+        } catch (error) {
+            console.error('Error getting recipient data:', error);
+            throw new Error(`Failed to read recipient data: ${error.message}`);
+        }
+    }
+
+    async getEmailTemplate() {
+        try {
+            if (!this.initialized) {
+                await this.initialize();
+            }
+
+            // Read email template from Sheet2
+            const response = await this.sheets.spreadsheets.values.get({
+                spreadsheetId: this.spreadsheetId,
+                range: 'Sheet2!A:B', // Title in column A, Subject/Content in column B
+            });
+
+            const rows = response.data.values;
+            if (!rows || rows.length === 0) {
+                return {
+                    subject: 'Default Subject',
+                    content: 'Default email content'
+                };
+            }
+
+            const template = {
+                subject: '',
+                content: ''
+            };
+
+            // Process each row to build the template
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                if (row && row.length >= 2) {
+                    const title = (row[0] || '').toLowerCase().trim();
+                    const content = row[1] || '';
+
+                    if (title === 'subject' || title === 'tiêu đề') {
+                        template.subject = content;
+                    } else if (title === 'content' || title === 'nội dung' || title === 'body') {
+                        template.content = content;
+                    }
+                }
+            }
+
+            // Fallback to using first row as subject, rest as content
+            if (!template.subject && !template.content && rows.length > 0) {
+                template.subject = rows[0][1] || 'Email Subject';
+                template.content = rows.slice(1)
+                    .map(row => row[1] || '')
+                    .filter(content => content.trim())
+                    .join('\n');
+            }
+
+            return template;
+
+        } catch (error) {
+            console.error('Error getting email template:', error);
+            throw new Error(`Failed to read email template: ${error.message}`);
+        }
+    }
+
+    async updateRecipientStatus(rowIndex, status) {
+        try {
+            if (!this.initialized) {
+                await this.initialize();
+            }
+
+            // Note: This requires write permissions
+            // For now, we'll just log the update since we're using API key (read-only)
+            console.log(`Would update row ${rowIndex} status to: ${status}`);
+            
+            // If you have write permissions, uncomment the following:
+            /*
+            await this.sheets.spreadsheets.values.update({
+                spreadsheetId: this.spreadsheetId,
+                range: `Sheet1!F${rowIndex}`,
+                valueInputOption: 'USER_ENTERED',
+                requestBody: {
+                    values: [[status]]
+                }
+            });
+            */
+
+            return true;
+        } catch (error) {
+            console.error('Error updating recipient status:', error);
+            return false;
+        }
+    }
+
+    async getSpreadsheetInfo() {
+        try {
+            if (!this.initialized) {
+                await this.initialize();
+            }
+
+            const response = await this.sheets.spreadsheets.get({
+                spreadsheetId: this.spreadsheetId,
+            });
+
+            return {
+                title: response.data.properties.title,
+                sheets: response.data.sheets.map(sheet => ({
+                    title: sheet.properties.title,
+                    sheetId: sheet.properties.sheetId,
+                    rowCount: sheet.properties.gridProperties.rowCount,
+                    columnCount: sheet.properties.gridProperties.columnCount
+                }))
+            };
+
+        } catch (error) {
+            console.error('Error getting spreadsheet info:', error);
+            throw error;
+        }
+    }
+
+    isValidEmail(email) {
+        if (!email || typeof email !== 'string') {
+            return false;
+        }
+        
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email.trim());
+    }
+
+    // Utility method to personalize email content
+    personalizeContent(template, recipient) {
+        let personalizedSubject = template.subject;
+        let personalizedContent = template.content;
+
+        // Replace placeholders with recipient data
+        const replacements = {
+            '{{name}}': recipient.name || 'Bạn',
+            '{{keyword}}': recipient.keyword || '',
+            '{{address}}': recipient.address || '',
+            '{{website}}': recipient.website || '',
+            '{{email}}': recipient.primaryEmail || '',
+            '{{company}}': recipient.name || '', // Assuming name might be company name
+        };
+
+        Object.keys(replacements).forEach(placeholder => {
+            const value = replacements[placeholder];
+            personalizedSubject = personalizedSubject.replace(new RegExp(placeholder, 'g'), value);
+            personalizedContent = personalizedContent.replace(new RegExp(placeholder, 'g'), value);
+        });
+
+        return {
+            subject: personalizedSubject,
+            content: personalizedContent
+        };
+    }
+
+    // Get recipients that haven't been processed yet
+    async getUnprocessedRecipients() {
+        const allRecipients = await this.getRecipientData();
+        return allRecipients.filter(recipient => 
+            recipient.status !== 'sent' && 
+            recipient.status !== 'failed' && 
+            recipient.status !== 'completed'
+        );
+    }
+
+    // Get summary statistics
+    async getRecipientStats() {
+        try {
+            const allRecipients = await this.getRecipientData();
+            
+            const stats = {
+                total: allRecipients.length,
+                sent: allRecipients.filter(r => r.status === 'sent').length,
+                failed: allRecipients.filter(r => r.status === 'failed').length,
+                pending: allRecipients.filter(r => r.status === 'new' || r.status === 'pending').length,
+                totalEmails: 0
+            };
+
+            // Count total email addresses
+            allRecipients.forEach(recipient => {
+                stats.totalEmails += recipient.allEmails ? recipient.allEmails.length : 0;
+            });
+
+            return stats;
+        } catch (error) {
+            console.error('Error getting recipient stats:', error);
+            return {
+                total: 0,
+                sent: 0,
+                failed: 0,
+                pending: 0,
+                totalEmails: 0
+            };
+        }
+    }
+}
+
+module.exports = GoogleSheetsService;
