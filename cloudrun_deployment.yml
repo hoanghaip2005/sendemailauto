@@ -10,7 +10,7 @@ spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/minScale: "1"               # giữ 1 instance để tránh cold start (có thể đổi "0" sau khi ổn định)
         autoscaling.knative.dev/maxScale: "10"
         run.googleapis.com/concurrency: "10"
         run.googleapis.com/startup-cpu-boost: "true"
@@ -18,22 +18,27 @@ spec:
     spec:
       serviceAccountName: email-automation-sa@thermal-highway-470815-u4.iam.gserviceaccount.com
       containerConcurrency: 10
-      timeoutSeconds: 900
+      timeoutSeconds: 3600                                   # request timeout tối đa 1 giờ
       containers:
-        - image: europe-west10-docker.pkg.dev/thermal-highway-470815-u4/sendemail/sendemail:latest
-          # KHÔNG khai báo containerPort; Cloud Run tự đặt $PORT
+        - image: gcr.io/thermal-highway-470815-u4/sendemail:latest
           resources:
             limits:
               cpu: "1"
               memory: 512Mi
+          # Startup probe: cho container thêm thời gian để mở cổng
+          startupProbe:
+            httpGet:
+              path: /_healthz
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 30                             # ~5 phút (10s * 30)
           env:
             - name: NODE_ENV
               value: "production"
-            - name: SERVICE_PORT
-              value: "8080"  # Cloud Run sẽ ghi đè biến này với port thực tế
             - name: TIMEZONE
               value: "Asia/Ho_Chi_Minh"
-            # (tuỳ) đặt sau khi có URL service để tracking pixel đúng
+            # KHÔNG cần SERVICE_PORT; Cloud Run sẽ set PORT
             - name: BASE_URL
               value: "https://sendemail-service-588067454384.europe-west10.run.app"
 
