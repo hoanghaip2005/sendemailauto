@@ -1,0 +1,64 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: sendemail-service
+  labels:
+    cloud.googleapis.com/location: europe-west10
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/concurrency: "10"
+        run.googleapis.com/startup-cpu-boost: "true"
+        run.googleapis.com/cpu-throttling: "true"
+    spec:
+      serviceAccountName: email-automation-sa@thermal-highway-470815-u4.iam.gserviceaccount.com
+      containerConcurrency: 10
+      timeoutSeconds: 900
+      containers:
+        - image: europe-west10-docker.pkg.dev/thermal-highway-470815-u4/sendemail/sendemail:latest
+          # KHÔNG khai báo containerPort; Cloud Run tự đặt $PORT
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: SERVICE_PORT
+              value: "8080"  # Cloud Run sẽ ghi đè biến này với port thực tế
+            - name: TIMEZONE
+              value: "Asia/Ho_Chi_Minh"
+            # (tuỳ) đặt sau khi có URL service để tracking pixel đúng
+            - name: BASE_URL
+              value: "https://sendemail-service-588067454384.europe-west10.run.app"
+
+            # --- Google Sheets ---
+            - name: GOOGLE_SHEET_URL
+              value: "https://docs.google.com/spreadsheets/d/1umBp2WniijlgWG-ynZJ5q5SBkbLmQxf2DTme2uFcnbw/edit?gid=1669432275#gid=1669432275"
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: GOOGLE_API_KEY
+                  key: latest
+
+            # --- Gmail: App Password ONLY ---
+            - name: AUTH_METHOD
+              value: "app-password"
+            - name: GMAIL_USER_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: GMAIL_USER_EMAIL
+                  key: latest
+            - name: GMAIL_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: GMAIL_APP_PASSWORD
+                  key: latest
+  traffic:
+    - percent: 100
+      latestRevision: true
