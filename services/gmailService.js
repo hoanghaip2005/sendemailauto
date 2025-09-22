@@ -16,6 +16,18 @@ class GmailService {
         try {
             console.log('Initializing Gmail service...');
             
+            // Check authentication method preference
+            const authMethod = process.env.AUTH_METHOD || 'oauth2';
+            
+            if (authMethod === 'app-password' && process.env.GMAIL_APP_PASSWORD) {
+                console.log('Using App Password authentication method');
+                await this.setupAppPasswordTransporter();
+                this.initialized = true;
+                this.authenticated = true;
+                console.log('Gmail service initialized with App Password authentication');
+                return;
+            }
+            
             // Setup OAuth2 authentication for Gmail API
             this.auth = new google.auth.OAuth2(
                 process.env.GOOGLE_CLIENT_ID,
@@ -38,10 +50,30 @@ class GmailService {
                 } catch (error) {
                     console.warn('Stored refresh token invalid, need to re-authenticate:', error.message);
                     this.authenticated = false;
+                    
+                    // Try app password fallback
+                    if (process.env.GMAIL_APP_PASSWORD) {
+                        console.log('Falling back to App Password authentication...');
+                        await this.setupAppPasswordTransporter();
+                        this.initialized = true;
+                        this.authenticated = true;
+                        console.log('Gmail service initialized with App Password fallback');
+                        return;
+                    }
                 }
             } else {
                 console.log('No valid refresh token found - authentication required');
                 this.authenticated = false;
+                
+                // Try app password fallback
+                if (process.env.GMAIL_APP_PASSWORD) {
+                    console.log('Falling back to App Password authentication...');
+                    await this.setupAppPasswordTransporter();
+                    this.initialized = true;
+                    this.authenticated = true;
+                    console.log('Gmail service initialized with App Password fallback');
+                    return;
+                }
             }
 
             // Initialize Gmail API
@@ -49,7 +81,7 @@ class GmailService {
 
             // Setup Nodemailer transporter for sending emails
             if (this.authenticated) {
-                await this.setupTransporter();
+                await this.setupOAuth2Transporter();
             }
 
             this.initialized = true;
@@ -57,11 +89,26 @@ class GmailService {
 
         } catch (error) {
             console.error('Failed to initialize Gmail service:', error);
+            
+            // Final fallback to app password if available
+            if (process.env.GMAIL_APP_PASSWORD && !this.authenticated) {
+                console.log('Attempting final fallback to App Password...');
+                try {
+                    await this.setupAppPasswordTransporter();
+                    this.initialized = true;
+                    this.authenticated = true;
+                    console.log('Gmail service initialized with App Password final fallback');
+                    return;
+                } catch (fallbackError) {
+                    console.error('App Password fallback failed:', fallbackError);
+                }
+            }
+            
             throw error;
         }
     }
 
-    async setupTransporter() {
+    async setupOAuth2Transporter() {
         try {
             // Get fresh access token
             const tokenInfo = await this.auth.getAccessToken();
@@ -75,15 +122,53 @@ class GmailService {
                     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
                     refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
                     accessToken: tokenInfo.token
-                }
+                },
+                pool: true,
+                maxConnections: 5,
+                maxMessages: 100,
+                socketTimeout: 60000,
+                connectionTimeout: 60000,
+                greetingTimeout: 30000
             });
 
             // Verify the transporter
             await this.transporter.verify();
-            console.log('Gmail transporter verified successfully');
+            console.log('OAuth2 Gmail transporter verified successfully');
 
         } catch (error) {
-            console.error('Failed to setup Gmail transporter:', error);
+            console.error('Failed to setup OAuth2 Gmail transporter:', error);
+            throw error;
+        }
+    }
+
+    async setupAppPasswordTransporter() {
+        try {
+            console.log('Setting up App Password transporter...');
+            
+            if (!process.env.GMAIL_USER_EMAIL || !process.env.GMAIL_APP_PASSWORD) {
+                throw new Error('Gmail user email or app password not configured');
+            }
+
+            this.transporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: {
+                    user: process.env.GMAIL_USER_EMAIL,
+                    pass: process.env.GMAIL_APP_PASSWORD
+                },
+                pool: true,
+                maxConnections: 5,
+                maxMessages: 100,
+                socketTimeout: 60000,
+                connectionTimeout: 60000,
+                greetingTimeout: 30000
+            });
+
+            // Verify the transporter
+            await this.transporter.verify();
+            console.log('App Password Gmail transporter verified successfully');
+
+        } catch (error) {
+            console.error('Failed to setup App Password Gmail transporter:', error);
             throw error;
         }
     }
@@ -94,14 +179,21 @@ class GmailService {
                 await this.initialize();
             }
 
-            if (!this.authenticated) {
+            if (!this.authenticated || !this.transporter) {
                 return false;
             }
 
-            // Test by getting user profile
-            await this.gmail.users.getProfile({
-                userId: 'me'
-            });
+            // For app password method, we're already authenticated if transporter exists
+            if (process.env.AUTH_METHOD === 'app-password') {
+                return true;
+            }
+
+            // Test by getting user profile for OAuth2
+            if (this.gmail) {
+                await this.gmail.users.getProfile({
+                    userId: 'me'
+                });
+            }
 
             return true;
         } catch (error) {
@@ -145,7 +237,7 @@ class GmailService {
             }
 
             this.authenticated = true;
-            await this.setupTransporter();
+            await this.setupOAuth2Transporter();
 
             return tokens;
         } catch (error) {
@@ -162,7 +254,11 @@ class GmailService {
 
             // Refresh transporter if needed
             if (!this.transporter) {
-                await this.setupTransporter();
+                if (process.env.AUTH_METHOD === 'app-password') {
+                    await this.setupAppPasswordTransporter();
+                } else {
+                    await this.setupOAuth2Transporter();
+                }
             }
 
             const mailOptions = {
