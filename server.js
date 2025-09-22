@@ -17,7 +17,9 @@ const CronJobManager = require('./utils/cronJobManager');
 class EmailAutomationServer {
     constructor() {
         this.app = express();
-        this.port = process.env.PORT || 3000;
+        // Cloud Run requires binding to the PORT environment variable
+        this.port = parseInt(process.env.PORT) || 3000;
+        this.host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
         this.logger = new Logger();
         
         // Initialize services
@@ -36,7 +38,7 @@ class EmailAutomationServer {
         
         this.setupMiddleware();
         this.setupRoutes();
-        this.initializeServices();
+        // Don't initialize services in constructor - do it after server starts
     }
 
     setupMiddleware() {
@@ -286,15 +288,48 @@ class EmailAutomationServer {
             }
         });
 
-        // Health check
-        apiRouter.get('/health', (req, res) => {
-            res.json({
-                status: 'OK',
-                timestamp: new Date().toISOString(),
-                uptime: process.uptime(),
-                memory: process.memoryUsage(),
-                version: process.env.npm_package_version || '1.0.0'
-            });
+        // Health check - optimized for Cloud Run
+        apiRouter.get('/health', async (req, res) => {
+            try {
+                // Quick health check without heavy operations
+                const healthStatus = {
+                    status: 'OK',
+                    timestamp: new Date().toISOString(),
+                    uptime: process.uptime(),
+                    version: process.env.npm_package_version || '1.0.0'
+                };
+
+                // Add memory info only if requested
+                if (req.query.detailed) {
+                    healthStatus.memory = process.memoryUsage();
+                    
+                    // Optional service status (don't fail health check if services are down)
+                    try {
+                        healthStatus.services = {
+                            sheets: await Promise.race([
+                                this.sheetsService.testConnection(),
+                                new Promise(resolve => setTimeout(() => resolve(false), 2000))
+                            ]),
+                            gmail: await Promise.race([
+                                this.gmailService.isAuthenticated(),
+                                new Promise(resolve => setTimeout(() => resolve(false), 2000))
+                            ])
+                        };
+                    } catch (error) {
+                        // Don't fail health check due to service status
+                        healthStatus.services = { error: 'Service check timeout' };
+                    }
+                }
+
+                res.status(200).json(healthStatus);
+            } catch (error) {
+                this.logger.error('Health check failed:', error);
+                res.status(500).json({ 
+                    status: 'ERROR',
+                    error: 'Health check failed',
+                    timestamp: new Date().toISOString()
+                });
+            }
         });
 
         this.app.use('/api', apiRouter);
@@ -349,18 +384,39 @@ class EmailAutomationServer {
         try {
             this.logger.info('Initializing services...');
             
-            // Initialize Google Sheets service
-            await this.sheetsService.initialize();
-            this.logger.info('Google Sheets service initialized');
+            // Initialize Google Sheets service with timeout
+            try {
+                await Promise.race([
+                    this.sheetsService.initialize(),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Sheets service initialization timeout')), 10000)
+                    )
+                ]);
+                this.logger.info('Google Sheets service initialized');
+            } catch (error) {
+                this.logger.warn('Google Sheets service initialization failed:', error.message);
+                // Don't fail server startup, service can be initialized later
+            }
             
-            // Initialize Gmail service
-            await this.gmailService.initialize();
-            this.logger.info('Gmail service initialized');
+            // Initialize Gmail service with timeout
+            try {
+                await Promise.race([
+                    this.gmailService.initialize(),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Gmail service initialization timeout')), 10000)
+                    )
+                ]);
+                this.logger.info('Gmail service initialized');
+            } catch (error) {
+                this.logger.warn('Gmail service initialization failed:', error.message);
+                // Don't fail server startup, service can be initialized later
+            }
             
-            this.logger.info('All services initialized successfully');
+            this.logger.info('Service initialization completed');
             
         } catch (error) {
-            this.logger.error('Error initializing services:', error);
+            this.logger.error('Error during service initialization:', error);
+            // Don't throw error to prevent server startup failure
         }
     }
 
@@ -374,13 +430,23 @@ class EmailAutomationServer {
     }
 
     start() {
-        return new Promise((resolve) => {
-            this.server = this.app.listen(this.port, () => {
-                this.logger.info(`🚀 Email Automation Server started on port ${this.port}`);
-                this.logger.info(`📱 Web interface: http://localhost:${this.port}`);
-                this.logger.info(`🔗 API base URL: http://localhost:${this.port}/api`);
-                resolve();
-            });
+        return new Promise((resolve, reject) => {
+            try {
+                this.server = this.app.listen(this.port, this.host, () => {
+                    this.logger.info(`🚀 Email Automation Server started on ${this.host}:${this.port}`);
+                    this.logger.info(`📱 Web interface: http://${this.host === '0.0.0.0' ? 'localhost' : this.host}:${this.port}`);
+                    this.logger.info(`🔗 API base URL: http://${this.host === '0.0.0.0' ? 'localhost' : this.host}:${this.port}/api`);
+                    resolve();
+                });
+                
+                this.server.on('error', (error) => {
+                    this.logger.error('Server failed to start:', error);
+                    reject(error);
+                });
+            } catch (error) {
+                this.logger.error('Error starting server:', error);
+                reject(error);
+            }
         });
     }
 
@@ -421,7 +487,20 @@ process.on('SIGINT', async () => {
 if (require.main === module) {
     const server = new EmailAutomationServer();
     global.emailServer = server;
-    server.start().catch(console.error);
+    
+    // Start server first, then initialize services in background
+    server.start()
+        .then(() => {
+            console.log('✅ Server started successfully');
+            // Initialize services in background - don't wait for completion
+            server.initializeServices().catch(error => {
+                console.error('❌ Service initialization failed:', error);
+            });
+        })
+        .catch(error => {
+            console.error('❌ Server failed to start:', error);
+            process.exit(1);
+        });
 }
 
 module.exports = EmailAutomationServer;
