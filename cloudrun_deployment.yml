@@ -20,7 +20,7 @@ spec:
       containerConcurrency: 10
       timeoutSeconds: 3600                                   # request timeout tối đa 1 giờ
       containers:
-        - image: gcr.io/thermal-highway-470815-u4/sendemail:latest
+        - image: europe-west10-docker.pkg.dev/thermal-highway-470815-u4/sendemail/sendemail:v2
           resources:
             limits:
               cpu: "1"
