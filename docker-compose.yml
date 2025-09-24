@@ -43,3 +43,7 @@ networks:
 
 # volumes:
 #   postgres_data:
+
+#docker push europe-west10-docker.pkg.dev/thermal-highway-470815-u4/sendemail/sendemail-service:latest
+
+#docker build -f Dockerfile -t europe-west10-docker.pkg.dev/thermal-highway-470815-u4/sendemail/sendemail-service:latest .

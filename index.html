@@ -43,14 +43,6 @@
             <div class="card">
                 <h2>⚙️ Điều khiển</h2>
                 <div class="control-buttons">
-                    <button id="start-cronjob" class="btn btn-primary">
-                        <span class="btn-icon">▶️</span>
-                        Bắt đầu tự động gửi
-                    </button>
-                    <button id="stop-cronjob" class="btn btn-secondary">
-                        <span class="btn-icon">⏹️</span>
-                        Dừng tự động gửi
-                    </button>
                     <button id="send-now" class="btn btn-accent">
                         <span class="btn-icon">📧</span>
                         Gửi ngay
@@ -65,15 +57,15 @@
                     </button>
                 </div>
                 
-                <div class="settings">
-                    <label for="interval-select">Chu kỳ gửi email:</label>
-                    <select id="interval-select">
-                        <option value="5">5 phút</option>
-                        <option value="15">15 phút</option>
-                        <option value="30" selected>30 phút</option>
-                        <option value="60">1 giờ</option>
-                        <option value="120">2 giờ</option>
-                    </select>
+                <div class="scheduler-info">
+                    <h3>☁️ Cloud Scheduler</h3>
+                    <p><strong>Tình trạng:</strong> <span class="scheduler-status">Đang hoạt động</span></p>
+                    <p><strong>Cấu hình:</strong> Quản lý lịch trình trong Google Cloud Console</p>
+                    <p><strong>Endpoint:</strong> <code>/api/send-email</code></p>
+                    <a href="https://console.cloud.google.com/cloudscheduler" target="_blank" class="btn btn-small btn-outline">
+                        <span class="btn-icon">🔗</span>
+                        Mở Cloud Console
+                    </a>
                 </div>
             </div>
         </section>
@@ -84,8 +76,8 @@
                 <h2>📡 Trạng thái hệ thống</h2>
                 <div class="status-indicators">
                     <div class="status-item">
-                        <span class="status-dot" id="cronjob-status"></span>
-                        <span>Cronjob: <span id="cronjob-text">Đang dừng</span></span>
+                        <span class="status-dot" id="scheduler-status"></span>
+                        <span>Cloud Scheduler: <span id="scheduler-text">Đang hoạt động</span></span>
                     </div>
                     <div class="status-item">
                         <span class="status-dot" id="sheets-status"></span>

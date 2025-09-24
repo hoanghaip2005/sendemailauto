@@ -25,12 +25,21 @@ RUN chown -R emailapp:nodejs /app
 # Switch to non-root user
 USER emailapp
 
-# Expose port
+# Expose ports
+EXPOSE 8080
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"
+# Health check optimized for Cloud Run
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD node -e " \
+        const http = require('http'); \
+        const port = process.env.PORT || 3000; \
+        const req = http.get(\`http://localhost:\${port}/api/health\`, (res) => { \
+            process.exit(res.statusCode === 200 ? 0 : 1); \
+        }); \
+        req.on('error', () => process.exit(1)); \
+        req.setTimeout(3000, () => { req.destroy(); process.exit(1); }); \
+    "
 
 # Start application
 CMD ["npm", "start"]

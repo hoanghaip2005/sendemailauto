@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
-const cron = require('node-cron');
 
 // Load environment variables
 dotenv.config();
@@ -12,7 +11,6 @@ const GoogleSheetsService = require('./services/googleSheetsService');
 const GmailService = require('./services/gmailService');
 const EmailService = require('./services/emailService');
 const Logger = require('./utils/logger');
-const CronJobManager = require('./utils/cronJobManager');
 
 class EmailAutomationServer {
     constructor() {
@@ -26,7 +24,6 @@ class EmailAutomationServer {
         this.sheetsService = new GoogleSheetsService();
         this.gmailService = new GmailService();
         this.emailService = new EmailService(this.sheetsService, this.gmailService, this.logger);
-        this.cronManager = new CronJobManager(this.emailService, this.logger);
         
         // Application state
         this.stats = {
@@ -136,10 +133,9 @@ class EmailAutomationServer {
         apiRouter.get('/status', async (req, res) => {
             try {
                 const status = {
-                    cronjob: {
-                        active: this.cronManager.isActive(),
-                        nextRun: this.cronManager.getNextRun(),
-                        interval: this.cronManager.getInterval()
+                    scheduler: {
+                        type: 'cloud-scheduler',
+                        note: 'Using Google Cloud Scheduler for automated email sending'
                     },
                     sheets: {
                         connected: await this.sheetsService.testConnection()
@@ -186,58 +182,16 @@ class EmailAutomationServer {
             }
         });
 
-        // Cronjob management
-        apiRouter.post('/cronjob/start', async (req, res) => {
-            try {
-                const { interval = 30 } = req.body;
-                
-                const started = await this.cronManager.start(interval);
-                if (started) {
-                    this.logger.info(`Cronjob started with ${interval} minute interval`);
-                    res.json({ success: true, message: 'Cronjob started successfully' });
-                } else {
-                    res.status(400).json({ error: 'Cronjob is already running' });
-                }
-            } catch (error) {
-                this.logger.error('Error starting cronjob:', error);
-                res.status(500).json({ error: 'Failed to start cronjob' });
-            }
-        });
-
-        apiRouter.post('/cronjob/stop', async (req, res) => {
-            try {
-                const stopped = this.cronManager.stop();
-                if (stopped) {
-                    this.logger.info('Cronjob stopped');
-                    res.json({ success: true, message: 'Cronjob stopped successfully' });
-                } else {
-                    res.status(400).json({ error: 'No cronjob is currently running' });
-                }
-            } catch (error) {
-                this.logger.error('Error stopping cronjob:', error);
-                res.status(500).json({ error: 'Failed to stop cronjob' });
-            }
-        });
-
-        apiRouter.put('/cronjob/interval', async (req, res) => {
-            try {
-                const { interval } = req.body;
-                
-                if (!interval || interval < 1) {
-                    return res.status(400).json({ error: 'Invalid interval value' });
-                }
-                
-                const updated = this.cronManager.updateInterval(interval);
-                if (updated) {
-                    this.logger.info(`Cronjob interval updated to ${interval} minutes`);
-                    res.json({ success: true, message: 'Interval updated successfully' });
-                } else {
-                    res.status(400).json({ error: 'Failed to update interval' });
-                }
-            } catch (error) {
-                this.logger.error('Error updating cronjob interval:', error);
-                res.status(500).json({ error: 'Failed to update interval' });
-            }
+        // Cloud Scheduler Information endpoint
+        apiRouter.get('/scheduler/info', (req, res) => {
+            res.json({
+                type: 'Google Cloud Scheduler',
+                endpoint: '/api/send-email',
+                method: 'POST',
+                description: 'Automated email sending managed by Google Cloud Scheduler',
+                status: 'Active',
+                configuration: 'Configure schedule in Google Cloud Console > Cloud Scheduler'
+            });
         });
 
         // Manual email sending
@@ -254,6 +208,56 @@ class EmailAutomationServer {
                 this.logger.error('Error sending emails manually:', error);
                 res.status(500).json({ error: 'Failed to send emails' });
             }
+        });
+
+        // Cloud Scheduler trigger endpoint - matches the URL in your scheduler
+        apiRouter.post('/send-email', async (req, res) => {
+            try {
+                this.logger.info('Email sending triggered by Cloud Scheduler');
+                
+                // Log scheduler information if available
+                const schedulerInfo = {
+                    timestamp: new Date().toISOString(),
+                    source: 'cloud-scheduler',
+                    headers: req.headers,
+                    body: req.body
+                };
+                
+                this.logger.info('Scheduler trigger info:', schedulerInfo);
+                
+                const result = await this.emailService.processEmails();
+                
+                // Update stats
+                this.updateStats(result);
+                
+                // Return success response for Cloud Scheduler
+                res.status(200).json({
+                    success: true,
+                    message: 'Email processing completed',
+                    timestamp: new Date().toISOString(),
+                    ...result
+                });
+                
+            } catch (error) {
+                this.logger.error('Error processing scheduled emails:', error);
+                
+                // Return error response for Cloud Scheduler
+                res.status(500).json({ 
+                    success: false,
+                    error: 'Failed to process emails',
+                    message: error.message,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        });
+
+        // Health check endpoint for Cloud Scheduler (GET version)
+        apiRouter.get('/send-email', (req, res) => {
+            res.status(200).json({
+                message: 'Email service endpoint is ready',
+                timestamp: new Date().toISOString(),
+                method: 'Use POST to trigger email sending'
+            });
         });
 
         // Log management
@@ -452,13 +456,10 @@ class EmailAutomationServer {
 
     async stop() {
         if (this.server) {
-            // Stop cronjob first
-            this.cronManager.stop();
-            
-            // Close server
+            // Close server gracefully
             await new Promise((resolve) => {
                 this.server.close(() => {
-                    this.logger.info('Server stopped');
+                    this.logger.info('Server stopped gracefully');
                     resolve();
                 });
             });

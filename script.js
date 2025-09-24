@@ -2,7 +2,6 @@
 class EmailAutomationApp {
     constructor() {
         this.baseURL = window.location.origin;
-        this.cronjobActive = false;
         this.stats = {
             total: 0,
             sent: 0,
@@ -26,16 +25,9 @@ class EmailAutomationApp {
 
     bindEvents() {
         // Control buttons
-        document.getElementById('start-cronjob').addEventListener('click', () => this.startCronjob());
-        document.getElementById('stop-cronjob').addEventListener('click', () => this.stopCronjob());
         document.getElementById('send-now').addEventListener('click', () => this.sendEmailsNow());
         document.getElementById('refresh-data').addEventListener('click', () => this.refreshData());
         document.getElementById('auth-gmail').addEventListener('click', () => this.authenticateGmail());
-        
-        // Settings
-        document.getElementById('interval-select').addEventListener('change', (e) => {
-            this.updateCronjobInterval(e.target.value);
-        });
         
         // Log controls
         document.getElementById('clear-logs').addEventListener('click', () => this.clearLogs());
@@ -73,9 +65,8 @@ class EmailAutomationApp {
         try {
             const status = await this.apiCall('/status');
             
-            // Update cronjob status
-            this.updateStatusIndicator('cronjob-status', status.cronjob.active, status.cronjob.active ? 'Đang chạy' : 'Đang dừng');
-            this.cronjobActive = status.cronjob.active;
+            // Update Cloud Scheduler status
+            this.updateStatusIndicator('scheduler-status', true, 'Đang hoạt động');
             
             // Update Google Sheets status
             this.updateStatusIndicator('sheets-status', status.sheets.connected, status.sheets.connected ? 'Kết nối thành công' : 'Lỗi kết nối');
@@ -97,7 +88,7 @@ class EmailAutomationApp {
             }
             
         } catch (error) {
-            this.updateStatusIndicator('cronjob-status', false, 'Lỗi hệ thống');
+            this.updateStatusIndicator('scheduler-status', false, 'Lỗi kết nối');
             this.updateStatusIndicator('sheets-status', false, 'Không thể kiểm tra');
             this.updateStatusIndicator('gmail-status', false, 'Không thể kiểm tra');
         }
@@ -145,48 +136,12 @@ class EmailAutomationApp {
         }
     }
 
-    async startCronjob() {
+    async getSchedulerInfo() {
         try {
-            const button = document.getElementById('start-cronjob');
-            button.disabled = true;
-            button.innerHTML = '<span class="loading"></span> Đang khởi động...';
-            
-            const interval = document.getElementById('interval-select').value;
-            await this.apiCall('/cronjob/start', 'POST', { interval: parseInt(interval) });
-            
-            this.addLog('success', 'Cronjob đã được khởi động');
-            this.cronjobActive = true;
-            this.updateCronjobButtons();
-            await this.checkSystemStatus();
-            
+            const info = await this.apiCall('/scheduler/info');
+            this.addLog('info', `Cloud Scheduler: ${info.description}`);
         } catch (error) {
-            this.addLog('error', `Không thể khởi động cronjob: ${error.message}`);
-        } finally {
-            const button = document.getElementById('start-cronjob');
-            button.disabled = false;
-            button.innerHTML = '<span class="btn-icon">▶️</span> Bắt đầu tự động gửi';
-        }
-    }
-
-    async stopCronjob() {
-        try {
-            const button = document.getElementById('stop-cronjob');
-            button.disabled = true;
-            button.innerHTML = '<span class="loading"></span> Đang dừng...';
-            
-            await this.apiCall('/cronjob/stop', 'POST');
-            
-            this.addLog('info', 'Cronjob đã được dừng');
-            this.cronjobActive = false;
-            this.updateCronjobButtons();
-            await this.checkSystemStatus();
-            
-        } catch (error) {
-            this.addLog('error', `Không thể dừng cronjob: ${error.message}`);
-        } finally {
-            const button = document.getElementById('stop-cronjob');
-            button.disabled = false;
-            button.innerHTML = '<span class="btn-icon">⏹️</span> Dừng tự động gửi';
+            this.addLog('error', `Không thể lấy thông tin scheduler: ${error.message}`);
         }
     }
 
@@ -266,26 +221,10 @@ class EmailAutomationApp {
         }
     }
 
-    async updateCronjobInterval(interval) {
-        try {
-            await this.apiCall('/cronjob/interval', 'PUT', { interval: parseInt(interval) });
-            this.addLog('info', `Đã cập nhật chu kỳ gửi email: ${interval} phút`);
-        } catch (error) {
-            this.addLog('error', `Không thể cập nhật chu kỳ: ${error.message}`);
-        }
-    }
-
-    updateCronjobButtons() {
-        const startBtn = document.getElementById('start-cronjob');
-        const stopBtn = document.getElementById('stop-cronjob');
-        
-        if (this.cronjobActive) {
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-        } else {
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-        }
+    openCloudConsole() {
+        const url = 'https://console.cloud.google.com/cloudscheduler';
+        window.open(url, '_blank');
+        this.addLog('info', 'Đã mở Google Cloud Console - Cloud Scheduler');
     }
 
     addLog(type, message) {
