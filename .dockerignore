@@ -1,0 +1,53 @@
+# Node modules (will be installed in container)
+node_modules
+
+# Development files
+.env.local
+.env.development
+.env.test
+
+# Git files
+.git
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/*.log
+
+# Temporary files
+tmp/
+temp/
+
+# Coverage reports
+coverage/
+
+# Build artifacts
+dist/
+build/
+
+# Docker files (not needed in container)
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Cloud Build
+cloudbuild.yaml
+
+# Test files
+test/
+tests/
+*.test.js
+*.spec.js
