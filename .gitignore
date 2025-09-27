@@ -70,8 +70,11 @@ temp/
 *.sqlite3
 
 # Google Service Account Key Files
-*.json
 service-account-key.json
+credentials/*.json
+
+# Exclude specific JSON files but allow package.json
+# *.json  # Commented out to allow package.json
 
 # Backup files
 *.backup
