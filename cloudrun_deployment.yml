@@ -44,7 +44,7 @@ spec:
 
             # --- Google Sheets ---
             - name: GOOGLE_SHEET_URL
-              value: "https://docs.google.com/spreadsheets/d/1k8wC4DRym7iNLa9rJki-lsPVs2fko4FF/edit?gid=394050351#gid=394050351"
+              value: "https://docs.google.com/spreadsheets/d/1k8wC4DRym7iNLa9rJki-lsPVs2fko4FF/edit?usp=sharing&ouid=117831572737296324517&rtpof=true&sd=true"
             - name: GOOGLE_API_KEY
               valueFrom:
                 secretKeyRef:
