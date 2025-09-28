@@ -262,7 +262,7 @@ class GmailService {
             }
 
             const mailOptions = {
-                from: `"Email Automation Tool" <${process.env.GMAIL_USER_EMAIL}>`,
+                from: `"Thanh Tung Trinh" <${process.env.GMAIL_USER_EMAIL}>`,
                 to: Array.isArray(to) ? to.join(', ') : to,
                 subject: subject,
                 html: htmlContent,
