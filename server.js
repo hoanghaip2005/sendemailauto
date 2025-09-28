@@ -226,7 +226,8 @@ class EmailAutomationServer {
                 
                 this.logger.info('Scheduler trigger info:', schedulerInfo);
                 
-                const result = await this.emailService.processEmails();
+                // Use processSingleEmail instead of processEmails for Cloud Scheduler
+                const result = await this.emailService.processSingleEmail();
                 
                 // Update stats
                 this.updateStats(result);
@@ -234,7 +235,7 @@ class EmailAutomationServer {
                 // Return success response for Cloud Scheduler
                 res.status(200).json({
                     success: true,
-                    message: 'Email processing completed',
+                    message: `Single email processing completed - ${result.sent} sent, ${result.failed} failed, ${result.remainingEmails || 0} remaining`,
                     timestamp: new Date().toISOString(),
                     ...result
                 });

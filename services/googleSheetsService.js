@@ -188,34 +188,39 @@ class GoogleSheetsService {
                 };
             }
 
+            // Filter out header row and empty rows
+            const validRows = rows.filter((row, index) => {
+                // Skip first row if it looks like a header
+                if (index === 0 && 
+                    ((row[0] || '').toLowerCase().includes('title') || 
+                     (row[0] || '').toLowerCase().includes('tiêu đề') ||
+                     (row[1] || '').toLowerCase().includes('subject'))) {
+                    return false;
+                }
+                // Keep rows that have both title and subject
+                return row && row.length >= 2 && row[0] && row[1];
+            });
+
+            if (validRows.length === 0) {
+                return {
+                    subject: 'Default Subject',
+                    content: 'Default email content'
+                };
+            }
+
+            // RANDOMLY select one row for this email
+            const randomIndex = Math.floor(Math.random() * validRows.length);
+            const selectedRow = validRows[randomIndex];
+
             const template = {
-                subject: '',
-                content: ''
+                title: selectedRow[0].trim(),           // Column A: Title
+                subject: selectedRow[1].trim(),         // Column B: Subject
+                content: selectedRow[1].trim(),         // Use subject as content for now
+                selectedIndex: randomIndex,
+                totalOptions: validRows.length
             };
 
-            // Process each row to build the template
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
-                if (row && row.length >= 2) {
-                    const title = (row[0] || '').toLowerCase().trim();
-                    const content = row[1] || '';
-
-                    if (title === 'subject' || title === 'tiêu đề') {
-                        template.subject = content;
-                    } else if (title === 'content' || title === 'nội dung' || title === 'body') {
-                        template.content = content;
-                    }
-                }
-            }
-
-            // Fallback to using first row as subject, rest as content
-            if (!template.subject && !template.content && rows.length > 0) {
-                template.subject = rows[0][1] || 'Email Subject';
-                template.content = rows.slice(1)
-                    .map(row => row[1] || '')
-                    .filter(content => content.trim())
-                    .join('\n');
-            }
+            console.log(`Email template: Selected row ${randomIndex + 1}/${validRows.length}: "${template.title}" - "${template.subject}"`);
 
             return template;
 

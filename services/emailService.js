@@ -6,6 +6,62 @@ class EmailService {
         this.processing = false;
     }
 
+    // NEW METHOD: Process only 1 email per run
+    async processSingleEmail() {
+        if (this.processing) {
+            throw new Error('Email processing already in progress');
+        }
+
+        this.processing = true;
+        
+        try {
+            this.logger.info('Starting single email processing...');
+            
+            // Get unprocessed recipients
+            const recipients = await this.sheetsService.getUnprocessedRecipients();
+            if (recipients.length === 0) {
+                this.logger.info('No unprocessed recipients found');
+                return { sent: 0, failed: 0, message: 'No emails to send' };
+            }
+
+            // Take only the FIRST recipient
+            const singleRecipient = [recipients[0]];
+            this.logger.info(`Processing 1 email for: ${singleRecipient[0].name || singleRecipient[0].email}`);
+
+            // Get email template
+            const template = await this.sheetsService.getEmailTemplate();
+            if (!template || !template.subject || !template.content) {
+                throw new Error('Invalid email template');
+            }
+
+            // Prepare single email
+            const emails = this.gmailService.prepareEmailBatch(singleRecipient, template);
+            this.logger.info(`Prepared 1 email for sending`);
+
+            // Send single email
+            const results = await this.sendEmailsWithRetry(emails);
+            
+            // Update recipient status
+            await this.updateRecipientStatuses(singleRecipient, results.details);
+
+            this.logger.info(`Single email processing completed. Sent: ${results.sent}, Failed: ${results.failed}`);
+
+            return {
+                sent: results.sent,
+                failed: results.failed,
+                total: 1,
+                remainingEmails: recipients.length - 1,
+                details: results.details
+            };
+
+        } catch (error) {
+            this.logger.error('Single email processing failed:', error);
+            throw error;
+        } finally {
+            this.processing = false;
+        }
+    }
+
     async processEmails() {
         if (this.processing) {
             throw new Error('Email processing already in progress');
