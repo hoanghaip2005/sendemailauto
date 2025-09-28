@@ -197,15 +197,7 @@ class EmailAutomationServer {
         // Manual email sending
         apiRouter.post('/send-emails', async (req, res) => {
             try {
-                this.logger.info('Manual email sending triggered - DISABLED DUE TO GMAIL LIMIT');
-                
-                // TEMPORARY: Disable email sending due to Gmail daily limit
-                return res.status(200).json({
-                    success: false,
-                    message: 'Email sending disabled due to Gmail daily limit exceeded',
-                    timestamp: new Date().toISOString(),
-                    note: 'Will resume tomorrow when Gmail limit resets'
-                });
+                this.logger.info('Manual email sending triggered');
                 
                 const result = await this.emailService.processEmails();
                 
@@ -222,15 +214,7 @@ class EmailAutomationServer {
         // Cloud Scheduler trigger endpoint - matches the URL in your scheduler
         apiRouter.post('/send-email', async (req, res) => {
             try {
-                this.logger.info('Email sending triggered by Cloud Scheduler - DISABLED DUE TO GMAIL LIMIT');
-                
-                // TEMPORARY: Disable email sending due to Gmail daily limit
-                return res.status(200).json({
-                    success: true,
-                    message: 'Email sending disabled due to Gmail daily limit exceeded',
-                    timestamp: new Date().toISOString(),
-                    note: 'Will resume tomorrow when Gmail limit resets'
-                });
+                this.logger.info('Email sending triggered by Cloud Scheduler');
                 
                 // Log scheduler information if available
                 const schedulerInfo = {
