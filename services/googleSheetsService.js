@@ -230,6 +230,76 @@ class GoogleSheetsService {
         }
     }
 
+    // NEW METHOD: Log email results to Sheet3
+    async logEmailResult(recipientName, recipientEmail, status, timestamp = null) {
+        try {
+            if (!this.initialized) {
+                await this.initialize();
+            }
+
+            // Use current timestamp if not provided
+            const logTimestamp = timestamp || new Date().toLocaleString('vi-VN', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            // Prepare row data: Name | Email | Status | Timestamp
+            const rowData = [
+                recipientName || 'Unknown',
+                recipientEmail || 'Unknown',
+                status || 'unknown',
+                logTimestamp
+            ];
+
+            console.log(`Logging to Sheet3: ${recipientName} (${recipientEmail}) - ${status} at ${logTimestamp}`);
+
+            // Check if Sheet3 exists and has headers, if not create them
+            try {
+                const response = await this.sheets.spreadsheets.values.get({
+                    spreadsheetId: this.spreadsheetId,
+                    range: 'Sheet3!A1:D1',
+                });
+
+                // If no headers, add them first
+                if (!response.data.values || response.data.values.length === 0) {
+                    await this.sheets.spreadsheets.values.update({
+                        spreadsheetId: this.spreadsheetId,
+                        range: 'Sheet3!A1:D1',
+                        valueInputOption: 'USER_ENTERED',
+                        requestBody: {
+                            values: [['Name', 'Email', 'Status', 'Timestamp']]
+                        }
+                    });
+                }
+            } catch (error) {
+                console.log('Sheet3 may not exist or headers not found, will try to append anyway');
+            }
+
+            // Append the new result
+            await this.sheets.spreadsheets.values.append({
+                spreadsheetId: this.spreadsheetId,
+                range: 'Sheet3!A:D',
+                valueInputOption: 'USER_ENTERED',
+                insertDataOption: 'INSERT_ROWS',
+                requestBody: {
+                    values: [rowData]
+                }
+            });
+
+            console.log(`Successfully logged result to Sheet3`);
+            return true;
+
+        } catch (error) {
+            console.error('Error logging email result to Sheet3:', error);
+            return false;
+        }
+    }
+
     async updateRecipientStatus(rowIndex, status) {
         try {
             if (!this.initialized) {

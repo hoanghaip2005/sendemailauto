@@ -189,10 +189,20 @@ class EmailService {
             if (recipient) {
                 const status = result.status === 'sent' ? 'sent' : 'failed';
                 try {
+                    // Log to Sheet3 with Name | Email | Status | Timestamp format
+                    await this.sheetsService.logEmailResult(
+                        recipient.name,
+                        result.email,
+                        status,
+                        new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
+                    );
+                    
+                    // Also update original method (though it may be commented out)
                     await this.sheetsService.updateRecipientStatus(recipient.rowIndex, status);
-                    this.logger.info(`Updated status for row ${recipient.rowIndex}: ${status}`);
+                    
+                    this.logger.info(`Logged result to Sheet3 for ${recipient.name} (${result.email}): ${status}`);
                 } catch (error) {
-                    this.logger.warn(`Failed to update status for row ${recipient.rowIndex}: ${error.message}`);
+                    this.logger.warn(`Failed to log result for ${recipient.name}: ${error.message}`);
                 }
             }
         }
