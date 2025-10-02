@@ -17,8 +17,19 @@ class EmailAutomationServer {
         this.app = express();
         // Cloud Run requires binding to the PORT environment variable
         this.port = parseInt(process.env.PORT) || 3000;
-        this.host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+        
+        // Environment detection
+        this.isCloudRun = !!(process.env.K_SERVICE || process.env.GOOGLE_CLOUD_PROJECT);
+        this.isProduction = process.env.NODE_ENV === 'production';
+        
+        // Host configuration based on environment
+        this.host = this.isCloudRun || this.isProduction ? '0.0.0.0' : 'localhost';
+        
         this.logger = new Logger();
+        
+        // Log environment info
+        this.logger.info(`Environment: ${this.isCloudRun ? 'Cloud Run' : 'Local'} (${process.env.NODE_ENV || 'development'})`);
+        this.logger.info(`Server will bind to: ${this.host}:${this.port}`);
         
         // Initialize services
         this.sheetsService = new GoogleSheetsService();
@@ -226,8 +237,12 @@ class EmailAutomationServer {
                 
                 this.logger.info('Scheduler trigger info:', schedulerInfo);
                 
-                // Use processSingleEmail instead of processEmails for Cloud Scheduler
-                const result = await this.emailService.processSingleEmail();
+                // Get batch size from environment or request body
+                const batchSize = req.body.batchSize || parseInt(process.env.EMAIL_BATCH_SIZE || '5');
+                this.logger.info(`Processing emails with batch size: ${batchSize}`);
+                
+                // Use processSingleEmail with configurable batch size
+                const result = await this.emailService.processSingleEmail(batchSize);
                 
                 // Update stats
                 this.updateStats(result);
@@ -235,8 +250,9 @@ class EmailAutomationServer {
                 // Return success response for Cloud Scheduler
                 res.status(200).json({
                     success: true,
-                    message: `Single email processing completed - ${result.sent} sent, ${result.failed} failed, ${result.remainingEmails || 0} remaining`,
+                    message: `Email batch processing completed - ${result.sent} sent, ${result.failed} failed, ${result.remainingEmails || 0} remaining`,
                     timestamp: new Date().toISOString(),
+                    batchSize: batchSize,
                     ...result
                 });
                 

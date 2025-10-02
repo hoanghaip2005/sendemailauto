@@ -1,6 +1,6 @@
 # Email Automation Tool
 
-Công cụ tự động gửi email từ Google Sheets với giao diện web đẹp mắt.
+Công cụ tự động gửi email từ Google Sheets với giao diện web đẹp mắt, hỗ trợ chạy dưới dạng service.
 
 ## 🌟 Tính năng
 
@@ -13,12 +13,15 @@ Công cụ tự động gửi email từ Google Sheets với giao diện web đ�
 - ✅ Quản lý trạng thái email trong Google Sheets
 - ✅ Preview email trước khi gửi
 - ✅ Rate limiting và retry mechanism
+- ✅ **Chạy dưới dạng daemon service với PM2**
+- ✅ **Cấu hình batch size cho số lượng email mỗi lần gửi**
 
 ## 🚀 Cài đặt
 
 ### Yêu cầu hệ thống
 - Node.js 18.0.0 trở lên
 - NPM hoặc Yarn
+- PM2 (sẽ được cài tự động)
 - Tài khoản Google với quyền truy cập Gmail và Google Sheets
 
 ### 1. Clone project
@@ -32,7 +35,12 @@ cd sendemail
 npm install
 ```
 
-### 3. Cấu hình môi trường
+### 3. Cài đặt PM2 (nếu chưa có)
+```bash
+npm run pm2:install
+```
+
+### 4. Cấu hình môi trường
 ```bash
 cp .env.example .env
 ```
@@ -50,9 +58,12 @@ GOOGLE_SHEET_URL=https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit
 GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 GOOGLE_API_KEY=your-google-api-key
+
+# Cấu hình batch size (số email gửi mỗi lần)
+EMAIL_BATCH_SIZE=5
 ```
 
-### 4. Xác thực Gmail API
+### 5. Xác thực Gmail API
 
 #### Bước 1: Lấy authorization URL
 ```bash
@@ -72,16 +83,67 @@ npm run save-token <authorization-code>
 
 Refresh token sẽ được lưu tự động vào file `.env`.
 
-### 5. Khởi chạy ứng dụng
+## 🔧 Khởi chạy Service
 
-#### Development mode
+### Service Management Commands
+
+#### Khởi động service (daemon mode)
+```bash
+npm run service:start
+```
+
+#### Dừng service
+```bash
+npm run service:stop
+```
+
+#### Restart service
+```bash
+npm run service:restart
+```
+
+#### Kiểm tra trạng thái service
+```bash
+npm run service:status
+```
+
+#### Xem logs realtime
+```bash
+npm run service:logs
+```
+
+### Development Mode
 ```bash
 npm run dev
 ```
 
-#### Production mode
+### Manual Start (foreground)
 ```bash
 npm start
+```
+
+## 🎛️ Cấu hình Batch Processing
+
+Trong file `.env`, bạn có thể cấu hình:
+
+```env
+# Số lượng email gửi mỗi lần Cloud Scheduler trigger
+EMAIL_BATCH_SIZE=5
+
+# Rate limit giữa các email (milliseconds)
+EMAIL_RATE_LIMIT_MS=1000
+
+# Số lần retry khi gửi email thất bại
+MAX_RETRY_ATTEMPTS=3
+```
+
+### Cloud Scheduler Configuration
+Khi sử dụng Google Cloud Scheduler, bạn có thể điều chỉnh batch size bằng cách gửi body:
+
+```json
+{
+  "batchSize": 10
+}
 ```
 
 Truy cập: http://localhost:3000

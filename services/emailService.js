@@ -6,8 +6,8 @@ class EmailService {
         this.processing = false;
     }
 
-    // NEW METHOD: Process only 1 email per run
-    async processSingleEmail() {
+    // IMPROVED METHOD: Process emails with configurable batch size
+    async processSingleEmail(batchSize = null) {
         if (this.processing) {
             throw new Error('Email processing already in progress');
         }
@@ -15,7 +15,9 @@ class EmailService {
         this.processing = true;
         
         try {
-            this.logger.info('Starting single email processing...');
+            // Determine batch size from env or parameter
+            const effectiveBatchSize = batchSize || parseInt(process.env.EMAIL_BATCH_SIZE || '1');
+            this.logger.info(`Starting email processing with batch size: ${effectiveBatchSize}...`);
             
             // Get unprocessed recipients
             const recipients = await this.sheetsService.getUnprocessedRecipients();
@@ -24,9 +26,9 @@ class EmailService {
                 return { sent: 0, failed: 0, message: 'No emails to send' };
             }
 
-            // Take only the FIRST recipient
-            const singleRecipient = [recipients[0]];
-            this.logger.info(`Processing 1 email for: ${singleRecipient[0].name || singleRecipient[0].email}`);
+            // Take only the specified number of recipients
+            const batchRecipients = recipients.slice(0, effectiveBatchSize);
+            this.logger.info(`Processing ${batchRecipients.length} emails for: ${batchRecipients.map(r => r.name || r.email).join(', ')}`);
 
             // Get email template
             const template = await this.sheetsService.getEmailTemplate();
@@ -34,28 +36,28 @@ class EmailService {
                 throw new Error('Invalid email template');
             }
 
-            // Prepare single email
-            const emails = this.gmailService.prepareEmailBatch(singleRecipient, template);
-            this.logger.info(`Prepared 1 email for sending`);
+            // Prepare emails
+            const emails = this.gmailService.prepareEmailBatch(batchRecipients, template);
+            this.logger.info(`Prepared ${emails.length} emails for sending`);
 
-            // Send single email
+            // Send emails
             const results = await this.sendEmailsWithRetry(emails);
             
-            // Update recipient status
-            await this.updateRecipientStatuses(singleRecipient, results.details);
+            // Update recipient statuses
+            await this.updateRecipientStatuses(batchRecipients, results.details);
 
-            this.logger.info(`Single email processing completed. Sent: ${results.sent}, Failed: ${results.failed}`);
+            this.logger.info(`Email processing completed. Sent: ${results.sent}, Failed: ${results.failed}`);
 
             return {
                 sent: results.sent,
                 failed: results.failed,
-                total: 1,
-                remainingEmails: recipients.length - 1,
+                total: batchRecipients.length,
+                remainingEmails: recipients.length - batchRecipients.length,
                 details: results.details
             };
 
         } catch (error) {
-            this.logger.error('Single email processing failed:', error);
+            this.logger.error('Email processing failed:', error);
             throw error;
         } finally {
             this.processing = false;

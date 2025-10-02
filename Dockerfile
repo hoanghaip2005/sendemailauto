@@ -6,13 +6,13 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
+# Install dependencies (production only for Cloud Run)
 RUN npm ci --omit=dev
 
 # Copy application code
 COPY . .
 
-# Create logs directory
+# Create logs directory with proper permissions
 RUN mkdir -p logs
 
 # Create non-root user
@@ -25,7 +25,7 @@ RUN chown -R emailapp:nodejs /app
 # Switch to non-root user
 USER emailapp
 
-# Expose ports
+# Cloud Run automatically sets PORT, but we expose both common ports
 EXPOSE 8080
 EXPOSE 3000
 
@@ -41,5 +41,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
         req.setTimeout(3000, () => { req.destroy(); process.exit(1); }); \
     "
 
-# Start application
-CMD ["npm", "start"]
+# Use cloud-optimized startup script
+CMD ["node", "start-cloud.js"]

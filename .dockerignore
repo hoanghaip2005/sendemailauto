@@ -1,10 +1,21 @@
 # Node modules (will be installed in container)
 node_modules
+npm-debug.log*
+
+# PM2 ecosystem (not needed in Cloud Run)
+ecosystem.config.json
+
+# Local service scripts (not needed in Cloud Run)
+scripts/start-service.bat
+scripts/stop-service.bat
+scripts/start-service.sh
+scripts/stop-service.sh
 
 # Development files
 .env.local
 .env.development
 .env.test
+.env.example
 
 # Git files
 .git
@@ -13,6 +24,7 @@ node_modules
 # Documentation
 README.md
 *.md
+docs/
 
 # IDE files
 .vscode/
@@ -24,8 +36,23 @@ README.md
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs (will be created at runtime)
 logs/*.log
+*.log
+
+# Testing
+coverage
+.coverage
+
+# Development tools
+nodemon.json
+.eslintrc.*
+.prettierrc
+
+# Cloud files that aren't needed in container
+cloudbuild.yaml
+cloudrun_deployment.yml
+deployment.md
 
 # Temporary files
 tmp/

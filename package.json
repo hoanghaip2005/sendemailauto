@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "start:cloud": "node start-cloud.js",
     "dev": "nodemon server.js",
     "setup": "node scripts/setup.js",
     "get-auth-url": "node scripts/get-auth-url.js",
@@ -14,7 +15,15 @@
     "docker:build": "docker build -t email-automation .",
     "docker:run": "docker run -p 3000:3000 --env-file .env email-automation",
     "docker:compose": "docker-compose up -d",
-    "logs": "tail -f logs/app.log"
+    "logs": "tail -f logs/app.log",
+    "service:start": "scripts\\start-service.bat",
+    "service:stop": "scripts\\stop-service.bat",
+    "service:restart": "pm2 restart sendemail-app",
+    "service:status": "pm2 status",
+    "service:logs": "pm2 logs sendemail-app",
+    "pm2:install": "npm install -g pm2",
+    "cloud:build": "gcloud builds submit --config cloudbuild.yaml",
+    "cloud:deploy": "gcloud run deploy sendemail-service --source . --region europe-west10 --allow-unauthenticated"
   },
   "keywords": [
     "email",
