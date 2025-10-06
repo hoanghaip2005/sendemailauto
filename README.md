@@ -15,6 +15,8 @@ Công cụ tự động gửi email từ Google Sheets với giao diện web đ�
 - ✅ Rate limiting và retry mechanism
 - ✅ **Chạy dưới dạng daemon service với PM2**
 - ✅ **Cấu hình batch size cho số lượng email mỗi lần gửi**
+- ✅ **Cloud Scheduler integration cho Google Cloud Platform**
+- ✅ **Tự động deploy với Cloud Build và Cloud Run**
 
 ## 🚀 Cài đặt
 
@@ -144,6 +146,101 @@ Khi sử dụng Google Cloud Scheduler, bạn có thể điều chỉnh batch si
 {
   "batchSize": 10
 }
+```
+
+## ☁️ Cloud Scheduler Setup (Tự động gửi email 2 tiếng/lần)
+
+### Yêu cầu
+- Google Cloud Project với billing enabled
+- gcloud CLI đã được cài đặt và cấu hình
+- Cloud Run service đã được deploy
+
+### 1. Deploy lên Cloud Run
+```bash
+# Set project ID
+export GOOGLE_CLOUD_PROJECT=your-project-id
+
+# Deploy application lên Cloud Run
+npm run cloud:deploy
+```
+
+### 2. Thiết lập Cloud Scheduler
+```bash
+# Deploy Cloud Scheduler job (tự động chạy mỗi 2 tiếng)
+npm run scheduler:deploy
+```
+
+### 3. Quản lý Cloud Scheduler
+
+**Xem danh sách jobs:**
+```bash
+npm run scheduler:list
+```
+
+**Test chạy thủ công:**
+```bash
+npm run scheduler:test
+```
+
+**Tạm dừng scheduler:**
+```bash
+npm run scheduler:pause
+```
+
+**Khởi động lại scheduler:**
+```bash
+npm run scheduler:resume
+```
+
+**Xóa scheduler:**
+```bash
+npm run scheduler:delete
+```
+
+### 4. Cấu hình lịch trình
+
+Cloud Scheduler được cấu hình để:
+- ✅ Chạy **mỗi 2 tiếng một lần** (0 */2 * * *)
+- ✅ Gửi **1 email mỗi lần chạy** (có thể điều chỉnh)
+- ✅ Tự động retry nếu lỗi (tối đa 3 lần)
+- ✅ Timeout 5 phút mỗi lần thực thi
+
+### 5. Monitoring
+
+**Xem logs Cloud Scheduler:**
+```bash
+gcloud logging read "resource.type=cloud_scheduler_job" --limit=50
+```
+
+**Xem logs Cloud Run:**
+```bash
+gcloud logging read "resource.type=cloud_run_revision" --limit=50
+```
+
+**Kiểm tra status qua API:**
+```bash
+curl https://your-service-url/api/status
+```
+
+### 6. Cấu hình nâng cao
+
+**Environment Variables cho Cloud Scheduler:**
+```env
+# Số email gửi mỗi lần Cloud Scheduler chạy
+SCHEDULED_EMAIL_BATCH_SIZE=1
+
+# Timeout cho mỗi request (giây)
+EMAIL_PROCESSING_TIMEOUT=300
+```
+
+**Tùy chỉnh lịch trình trong `deploy-scheduler.ps1`:**
+```powershell
+# Các ví dụ lịch trình khác:
+# Mỗi giờ: "0 * * * *"
+# Mỗi 30 phút: "*/30 * * * *"
+# Mỗi 4 tiếng: "0 */4 * * *"
+# Mỗi ngày lúc 9h sáng: "0 9 * * *"
+$Schedule = "0 */2 * * *"  # Hiện tại: mỗi 2 tiếng
 ```
 
 Truy cập: http://localhost:3000

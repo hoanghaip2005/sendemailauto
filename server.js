@@ -205,6 +205,41 @@ class EmailAutomationServer {
             });
         });
 
+        // Simple GET endpoint for Cloud Scheduler (workaround for POST issues)
+        apiRouter.get('/trigger-email', async (req, res) => {
+            try {
+                this.logger.info('Email sending triggered via GET endpoint');
+                
+                // Get batch size from query parameter
+                const batchSize = parseInt(req.query.batchSize || '1');
+                this.logger.info(`Processing emails with batch size: ${batchSize}`);
+                
+                // Use processSingleEmail with configurable batch size
+                const result = await this.emailService.processSingleEmail(batchSize);
+                
+                // Update stats
+                this.updateStats(result);
+                
+                // Return success response
+                res.status(200).json({
+                    success: true,
+                    message: `Email batch processing completed - ${result.sent} sent, ${result.failed} failed, ${result.remainingEmails || 0} remaining`,
+                    timestamp: new Date().toISOString(),
+                    batchSize: batchSize,
+                    ...result
+                });
+                
+            } catch (error) {
+                this.logger.error('Error processing emails via GET:', error);
+                res.status(500).json({ 
+                    success: false,
+                    error: 'Failed to process emails',
+                    message: error.message,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        });
+
         // Manual email sending
         apiRouter.post('/send-emails', async (req, res) => {
             try {
@@ -227,18 +262,17 @@ class EmailAutomationServer {
             try {
                 this.logger.info('Email sending triggered by Cloud Scheduler');
                 
-                // Log scheduler information if available
-                const schedulerInfo = {
-                    timestamp: new Date().toISOString(),
-                    source: 'cloud-scheduler',
+                // Enhanced logging for debugging
+                this.logger.info('Request details:', {
                     headers: req.headers,
-                    body: req.body
-                };
-                
-                this.logger.info('Scheduler trigger info:', schedulerInfo);
+                    body: req.body,
+                    method: req.method,
+                    url: req.url,
+                    userAgent: req.get('User-Agent')
+                });
                 
                 // Get batch size from environment or request body
-                const batchSize = req.body.batchSize || parseInt(process.env.EMAIL_BATCH_SIZE || '5');
+                const batchSize = req.body.batchSize || parseInt(process.env.EMAIL_BATCH_SIZE || '1');
                 this.logger.info(`Processing emails with batch size: ${batchSize}`);
                 
                 // Use processSingleEmail with configurable batch size
@@ -263,6 +297,55 @@ class EmailAutomationServer {
                 res.status(500).json({ 
                     success: false,
                     error: 'Failed to process emails',
+                    message: error.message,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        });
+
+        // Dedicated endpoint for Cloud Scheduler with authentication header verification
+        apiRouter.post('/scheduled-email', async (req, res) => {
+            try {
+                // Verify Cloud Scheduler request (optional security check)
+                const userAgent = req.get('User-Agent');
+                if (!userAgent || !userAgent.includes('Google-Cloud-Scheduler')) {
+                    this.logger.warn('Scheduled email request from unknown source:', userAgent);
+                }
+                
+                this.logger.info('Scheduled email job triggered every 2 hours');
+                
+                // Get batch size (default to 1 for scheduled jobs)
+                const batchSize = req.body.batchSize || parseInt(process.env.SCHEDULED_EMAIL_BATCH_SIZE || '1');
+                this.logger.info(`Processing scheduled emails with batch size: ${batchSize}`);
+                
+                // Process emails
+                const result = await this.emailService.processSingleEmail(batchSize);
+                
+                // Update stats
+                this.updateStats(result);
+                
+                // Log results
+                this.logger.info(`Scheduled email job completed: ${result.sent} sent, ${result.failed} failed, ${result.remainingEmails || 0} remaining`);
+                
+                // Return success response
+                res.status(200).json({
+                    success: true,
+                    scheduled: true,
+                    message: `Scheduled email job completed - ${result.sent} sent, ${result.failed} failed`,
+                    timestamp: new Date().toISOString(),
+                    nextSchedule: '2 hours from now',
+                    batchSize: batchSize,
+                    ...result
+                });
+                
+            } catch (error) {
+                this.logger.error('Error in scheduled email job:', error);
+                
+                // Return error response
+                res.status(500).json({ 
+                    success: false,
+                    scheduled: true,
+                    error: 'Scheduled email job failed',
                     message: error.message,
                     timestamp: new Date().toISOString()
                 });

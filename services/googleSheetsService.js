@@ -26,13 +26,33 @@ class GoogleSheetsService {
 
     async initialize() {
         try {
-            // Prioritize API key for read-only access (simplest method)
-            if (process.env.GOOGLE_API_KEY) {
-                console.log('Using Google API key for Sheets access');
-                this.sheets = google.sheets({ 
-                    version: 'v4', 
-                    auth: process.env.GOOGLE_API_KEY 
+            // For Cloud Run, prioritize service account authentication
+            const isCloudRun = !!(process.env.K_SERVICE || process.env.GOOGLE_CLOUD_PROJECT);
+            
+            if (isCloudRun) {
+                console.log('Using Google Application Default Credentials for Cloud Run');
+                this.auth = new google.auth.GoogleAuth({
+                    scopes: [
+                        'https://www.googleapis.com/auth/spreadsheets',
+                        'https://www.googleapis.com/auth/drive.file'
+                    ],
                 });
+                this.sheets = google.sheets({ version: 'v4', auth: this.auth });
+                this.initialized = true;
+                return;
+            }
+
+            // Use service account if keyFile is specified (for local development)
+            if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE) {
+                console.log('Using service account for Sheets access');
+                this.auth = new google.auth.GoogleAuth({
+                    keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE,
+                    scopes: [
+                        'https://www.googleapis.com/auth/spreadsheets',
+                        'https://www.googleapis.com/auth/drive.file'
+                    ],
+                });
+                this.sheets = google.sheets({ version: 'v4', auth: this.auth });
                 this.initialized = true;
                 return;
             }
@@ -58,23 +78,18 @@ class GoogleSheetsService {
                 return;
             }
 
-            // Use service account if keyFile is specified
-            if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE) {
-                console.log('Using service account for Sheets access');
-                this.auth = new google.auth.GoogleAuth({
-                    keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE,
-                    scopes: [
-                        'https://www.googleapis.com/auth/spreadsheets.readonly',
-                        'https://www.googleapis.com/auth/drive.readonly'
-                    ],
+            // Fallback to API key for read-only access
+            if (process.env.GOOGLE_API_KEY) {
+                console.log('Using Google API key for Sheets access (read-only)');
+                this.sheets = google.sheets({ 
+                    version: 'v4', 
+                    auth: process.env.GOOGLE_API_KEY 
                 });
-
-                this.sheets = google.sheets({ version: 'v4', auth: this.auth });
                 this.initialized = true;
                 return;
             }
 
-            throw new Error('No valid Google authentication method found. Please provide GOOGLE_API_KEY, OAuth2 credentials, or service account key file.');
+            throw new Error('No valid Google authentication method found. Please provide OAuth2 credentials, service account key file, or API key.');
 
         } catch (error) {
             console.error('Failed to initialize Google Sheets service:', error);

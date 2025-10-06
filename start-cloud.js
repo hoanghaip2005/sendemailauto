@@ -65,18 +65,21 @@ const gracefulShutdown = async (signal) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// Start server
+// Start server with better error handling
 server.start()
     .then(() => {
-        console.log('✅ Server started successfully');
+        console.log(`✅ Server started successfully on ${config.host}:${config.port}`);
+        console.log(`🌐 Health check: http://${config.host}:${config.port}/api/health`);
         
-        // Initialize services in background for Cloud Run
+        // For Cloud Run, ensure we're ready before initializing services
         if (isCloudRun) {
-            // For Cloud Run, initialize services immediately to ensure readiness
-            console.log('🔧 Initializing services for Cloud Run...');
-            server.initializeServices()
-                .then(() => console.log('✅ Services initialized'))
-                .catch(error => console.warn('⚠️ Service initialization warning:', error.message));
+            console.log('🔧 Cloud Run detected - initializing services...');
+            // Give server a moment to be fully ready
+            setTimeout(() => {
+                server.initializeServices()
+                    .then(() => console.log('✅ Services initialized for Cloud Run'))
+                    .catch(error => console.warn('⚠️ Service initialization warning:', error.message));
+            }, 1000);
         } else {
             // For local development, initialize in background
             server.initializeServices().catch(error => {

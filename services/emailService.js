@@ -142,7 +142,7 @@ class EmailService {
                         results.sent++;
                         results.details.push({
                             recipientId: email.recipientId,
-                            email: email.to,
+                            email: Array.isArray(email.to) ? email.to[0] : email.to,
                             status: 'sent',
                             messageId: result.messageId,
                             attempt: attempt
@@ -170,7 +170,7 @@ class EmailService {
                 results.failed++;
                 results.details.push({
                     recipientId: email.recipientId,
-                    email: email.to,
+                    email: Array.isArray(email.to) ? email.to[0] : email.to,
                     status: 'failed',
                     error: lastError,
                     attempts: maxRetries

@@ -8,6 +8,15 @@ logs/
 # Node modules
 node_modules/
 
+# Temporary scripts and unused files
+deploy-scheduler-*.ps1
+deploy-scheduler.sh
+*-unused.*
+*-backup.*
+*-old.*
+*.tmp
+*.temp
+
 # Runtime data
 pids
 *.pid
